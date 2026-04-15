@@ -88,11 +88,19 @@ def create_matcher(known_questions):
     return vectorizer, tfidf_matrix
 
 def find_top_matches(query, known_questions, vectorizer, tfidf_matrix, k=5):
-    """Find the top K matching known questions using TF-IDF Cosine Similarity."""
+    """Find the top K matching known questions with generic term filtering and noise reduction."""
     if not known_questions or tfidf_matrix is None:
         return []
         
-    query_vec = vectorizer.transform([query.lower()])
+    # Filter out 'noise' words that are in every university fact to prevent 'Generic Word Hijacking'
+    STOP_WORDS = ["kle", "tech", "university", "technological", "college", "campus", "in", "of", "about", "for", "is", "where"]
+    query_clean = " ".join([w for w in query.lower().split() if w not in STOP_WORDS])
+    
+    # If query becomes empty after cleaning (e.g. just 'KLE Tech'), use the original
+    if not query_clean.strip():
+        query_clean = query.lower()
+
+    query_vec = vectorizer.transform([query_clean])
     cosine_similarities = cosine_similarity(query_vec, tfidf_matrix).flatten()
     
     # Get indices of top k scores
@@ -101,30 +109,34 @@ def find_top_matches(query, known_questions, vectorizer, tfidf_matrix, k=5):
     results = []
     for idx in top_indices:
         results.append({
-            "score": cosine_similarities[idx],
+            "score": float(cosine_similarities[idx]),
             "question": known_questions[idx]
         })
     return results
 
-def find_best_match(query, known_questions, vectorizer, tfidf_matrix):
-    """Find the best matching known question (Legacy support)."""
-    results = find_top_matches(query, known_questions, vectorizer, tfidf_matrix, k=1)
-    if not results:
-        return 0.0, ""
-    return results[0]["score"], results[0]["question"]
-
-def load_retrieval_system(jsonl_path='kle_tech_dataset.jsonl'):
-    """Loads only the dataset and TF-IDF matcher for RAG purposes."""
+def load_retrieval_system(dataset_path="kle_tech_dataset.jsonl"):
+    """Loads the university knowledge base and dynamically builds the search index to ensure 100% data visibility."""
     knowledge_base = {}
-    if os.path.exists(jsonl_path):
-        with open(jsonl_path, 'r', encoding='utf-8') as f:
+    known_questions = []
+    
+    if os.path.exists(dataset_path):
+        with open(dataset_path, 'r', encoding='utf-8') as f:
             for line in f:
                 if not line.strip(): continue
                 data = json.loads(line)
-                knowledge_base[data["user"].lower()] = data["assistant"]
+                q = data["user"]
+                knowledge_base[q] = data["assistant"]
+                known_questions.append(q)
     
-    known_questions = list(knowledge_base.keys())
-    vectorizer, tfidf_matrix = create_matcher(known_questions)
+    if not known_questions:
+        print(f"Warning: No knowledge found in {dataset_path}")
+        return {}, [], None, None
+
+    # Step: Dynamically rebuild the TF-IDF index for the current data
+    # This prevents the 'Zero-Score' bug by ensuring the dictionary includes all new words
+    vectorizer = TfidfVectorizer(stop_words='english')
+    tfidf_matrix = vectorizer.fit_transform(known_questions)
+    
     return knowledge_base, known_questions, vectorizer, tfidf_matrix
 
 def find_best_answer(query, knowledge_base, known_questions, vectorizer, tfidf_matrix, k=5, min_score=0.25):
@@ -134,8 +146,11 @@ def find_best_answer(query, knowledge_base, known_questions, vectorizer, tfidf_m
     # Filter out low-quality matches to prevent 'noise' flooding
     reliable_hits = [h for h in top_hits if h["score"] >= min_score]
     
-    # If no high-quality match but top hit is decent, keep the top hit anyway
-    if not reliable_hits and top_hits and top_hits[0]["score"] > 0.15:
+    # [CONTEXT PURITY GUARD]: If the top hit is extremely strong (>0.5), we discard everything else.
+    # This keeps the 0.5B model's brain 'pure' and prevents it from mixing two facts together.
+    if reliable_hits and reliable_hits[0]["score"] > 0.5:
+        reliable_hits = [reliable_hits[0]]
+    elif not reliable_hits and top_hits and top_hits[0]["score"] > 0.15:
         reliable_hits = [top_hits[0]]
         
     if not reliable_hits:

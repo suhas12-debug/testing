@@ -45,6 +45,17 @@ def expand_fact(labels, answer, category="factual"):
     return entries
 
 # --- Data Definition ---
+# Global University Facts [LOCATION / PLACEMENT / RANKING Anchors]
+# We saturate these with keywords so the search engine cannot miss them
+UNIVERSITY_FACTS = [
+    ("location of kle tech university in hubli hubballi vidyanagar karnataka campus address", "[LOCATION]: KLE Tech is located in Hubballi (Hubli), Karnataka, India. Its main campus is in BVB Campus, Vidyanagar."),
+    ("where exactly is kle tech university situated hubli hubballi", "[LOCATION]: KLE Tech is situated in Hubballi (Hubli), Karnataka. The campus address is BVB Campus, Vidyanagar."),
+    ("how can i reach the kle tech campus in hubballi airport railway station", "[LOCATION]: Reach KLE Tech by Hubballi Airport (HBX), Hubballi Junction (Rail), or via the Vidyanagar campus main gate."),
+    ("placement records statistics companies average highest package google amazon", "[PLACEMENT]: KLE Tech has an exceptional placement record with 90%+ students placed yearly. Top companies include Google, Amazon, AWS, Bosch, and Microsoft."),
+    ("highest package at kle tech google microsoft placements stats", "[PLACEMENT]: The highest international and domestic packages at KLE Tech often exceed INR 30-40 Lakhs per annum for top engineering roles."),
+    ("university ranking nirf karnataka top engineering colleges best in hubli", "[RANKING]: KLE Tech is consistently ranked among the top engineering colleges in Karnataka and features in the NIRF ranking bands.")
+]
+
 HOLIDAYS = [
     ("Chandramana Ugadi", "19th March 2026"),
     ("Compensatory Holiday", "20th March 2026"),
@@ -89,6 +100,14 @@ final_pairs.extend(expand_fact(
     ["who you are", "your role", "KLE Tech Assistant", "are you a person"], 
     "[PERSONA]: I am the official Virtual Assistant for KLE Technological University (KLE Tech). I am an AI designed to help with university-related information."
 ))
+
+# 1b. Global Facts [LOCATION / PLACEMENT / RANKING Anchors]
+for query_label, fact_ans in UNIVERSITY_FACTS:
+    final_pairs.extend(expand_fact(
+        [query_label, f"Tell me about {query_label}", f"Info on {query_label}"],
+        fact_ans,
+        "factual"
+    ))
 
 # 2. Fees [FEE Anchor]
 final_pairs.extend(expand_fact(

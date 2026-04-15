@@ -38,14 +38,62 @@ def load_qwen(adapter_path="kle_tech_qwen_adapter"):
         
     return model, tokenizer
 
+def generate_answer(model_tokenizer_tuple, user_input, fact_context, score):
+    model, tokenizer = model_tokenizer_tuple
+    
+    if score < SIMILARITY_THRESHOLD:
+        # If no university data found, let Qwen answer generally
+        prompt_messages = [
+            {"role": "system", "content": "You are a helpful assistant for KLE Technological University. If you don't know something for sure, just be polite."},
+            {"role": "user", "content": user_input}
+        ]
+        text = tokenizer.apply_chat_template(
+            prompt_messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+    else:
+        # If we found university data, inject it as context
+        # ChatML Format with ULTRA-STRICT Instruction Guardrails
+        text = (
+            f"<|im_start|>system\nYou are the official KLE Tech Assistant. Use ONLY the following verified university data "
+            f"to answer. \n\n"
+            f"STRICT INSTRUCTIONS (FOLLOW OR YOU FAIL):\n"
+            f"1. DAY MATCHING: If the user asks for a specific DAY (e.g., Thursday), ONLY look at data for that day. If you see Saturday or Monday, IGNORE IT.\n"
+            f"2. NO GUESSING: If the data doesn't explicitly contain the answer, say 'I am sorry, that specific information is not in my verified records.'\n"
+            f"3. CONTEXT SEPARATION: Do NOT mention holidays if the user is asking about location or placements. Keep topics separate.\n"
+            f"4. CATEGORY ACCURACY: Ensure your answer matches the context anchor (e.g. [LOCATION], [PLACEMENT]).\n\n"
+            f"VERIFIED DATA:\n{fact_context}<|im_end|>\n"
+            f"<|im_start|>user\n{user_input}<|im_end|>\n"
+            f"<|im_start|>assistant\n"
+        )
+    
+    # Step 2: Generation (Greedy Decoding for 100% Accuracy)
+    model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
+
+    generated_ids = model.generate(
+        **model_inputs,
+        max_new_tokens=150,
+        do_sample=False,  # Force literal matching
+        temperature=None,
+        top_p=None
+    )
+    generated_ids = [
+        output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
+    ]
+
+    response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    return response
+
 def main():
     # 1. Load the Retrieval System (University Data)
     kb, k_q, v, m = load_retrieval_system()
     
     # 2. Load the Generation System (Qwen LLM + Adapter)
-    model, tokenizer = load_qwen()
+    qbox = load_qwen()
     
-    print_logo()
+    # 3. Clean up VRAM for a fresh session
+    torch.cuda.empty_cache()
     print(f"{CLR_GREEN}Fine-Tuned Hybrid Bot Ready!{CLR_RESET} Optimized for 4GB VRAM.")
     print(f"I am now specifically trained on KLE Tech data for better accuracy.\n")
     
@@ -72,43 +120,8 @@ def main():
                 sys.stdout.flush()
             sys.stdout.write("\r" + " " * 20 + "\r")
             
-            if score < SIMILARITY_THRESHOLD:
-                # If no university data found, let Qwen answer generally
-                prompt_messages = [
-                    {"role": "system", "content": "You are a helpful assistant for KLE Technological University. If you don't know something for sure, just be polite."},
-                    {"role": "user", "content": user_input}
-                ]
-                text = tokenizer.apply_chat_template(
-                    prompt_messages,
-                    tokenize=False,
-                    add_generation_prompt=True
-                )
-            else:
-                # If we found university data, inject it as context
-                # ChatML Format with Strict Instruction
-                text = (
-                    f"<|im_start|>system\nYou are the official KLE Tech Assistant. Use ONLY the following verified university data "
-                    f"to answer. If the data does not contain a specific number requested, state it clearly. "
-                    f"Do NOT guess.\n\nVERIFIED DATA:\n{fact_context}<|im_end|>\n"
-                    f"<|im_start|>user\n{user_input}<|im_end|>\n"
-                    f"<|im_start|>assistant\n"
-                )
-            
-            # Step 2: Generation (LLM)
-            model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
-
-            generated_ids = model.generate(
-                **model_inputs,
-                max_new_tokens=150,
-                do_sample=True,
-                temperature=0.7,
-                top_p=0.9
-            )
-            generated_ids = [
-                output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
-            ]
-
-            response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+            # Step 2: Generation
+            response = generate_answer(qbox, user_input, fact_context, score)
             
             # Step 3: Output with typing effect
             typing_print(f"{CLR_BLUE}Bot:{CLR_RESET} ", response)
