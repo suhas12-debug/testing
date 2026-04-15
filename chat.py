@@ -87,17 +87,76 @@ def create_matcher(known_questions):
         tfidf_matrix = None
     return vectorizer, tfidf_matrix
 
-def find_best_match(query, known_questions, vectorizer, tfidf_matrix):
-    """Find the best matching known question using TF-IDF Cosine Similarity."""
+def find_top_matches(query, known_questions, vectorizer, tfidf_matrix, k=5):
+    """Find the top K matching known questions using TF-IDF Cosine Similarity."""
     if not known_questions or tfidf_matrix is None:
-        return 0.0, ""
+        return []
         
     query_vec = vectorizer.transform([query.lower()])
     cosine_similarities = cosine_similarity(query_vec, tfidf_matrix).flatten()
-    best_idx = cosine_similarities.argmax()
-    best_score = cosine_similarities[best_idx]
     
-    return best_score, known_questions[best_idx]
+    # Get indices of top k scores
+    top_indices = cosine_similarities.argsort()[-k:][::-1]
+    
+    results = []
+    for idx in top_indices:
+        results.append({
+            "score": cosine_similarities[idx],
+            "question": known_questions[idx]
+        })
+    return results
+
+def find_best_match(query, known_questions, vectorizer, tfidf_matrix):
+    """Find the best matching known question (Legacy support)."""
+    results = find_top_matches(query, known_questions, vectorizer, tfidf_matrix, k=1)
+    if not results:
+        return 0.0, ""
+    return results[0]["score"], results[0]["question"]
+
+def load_retrieval_system(jsonl_path='kle_tech_dataset.jsonl'):
+    """Loads only the dataset and TF-IDF matcher for RAG purposes."""
+    knowledge_base = {}
+    if os.path.exists(jsonl_path):
+        with open(jsonl_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if not line.strip(): continue
+                data = json.loads(line)
+                knowledge_base[data["user"].lower()] = data["assistant"]
+    
+    known_questions = list(knowledge_base.keys())
+    vectorizer, tfidf_matrix = create_matcher(known_questions)
+    return knowledge_base, known_questions, vectorizer, tfidf_matrix
+
+def find_best_answer(query, knowledge_base, known_questions, vectorizer, tfidf_matrix, k=5, min_score=0.25):
+    """Retrieves and aggregates the top context facts from the knowledge base with strict filtering."""
+    top_hits = find_top_matches(query, known_questions, vectorizer, tfidf_matrix, k=k)
+    
+    # Filter out low-quality matches to prevent 'noise' flooding
+    reliable_hits = [h for h in top_hits if h["score"] >= min_score]
+    
+    # If no high-quality match but top hit is decent, keep the top hit anyway
+    if not reliable_hits and top_hits and top_hits[0]["score"] > 0.15:
+        reliable_hits = [top_hits[0]]
+        
+    if not reliable_hits:
+        return 0.0, "No highly relevant university data found."
+    
+    # Aggregate facts with Fact-Shield headers
+    unique_answers = []
+    max_score = reliable_hits[0]["score"]
+    
+    for i, hit in enumerate(reliable_hits):
+        ans = knowledge_base.get(hit["question"])
+        if ans and ans not in unique_answers:
+            unique_answers.append(ans)
+            
+    # Structure the context so the model sees individual bits of truth
+    context_blocks = []
+    for i, ans in enumerate(unique_answers):
+        context_blocks.append(f"[VERIFIED KNOWLEDGE #{i+1}]: {ans}")
+        
+    aggregated_context = "\n".join(context_blocks)
+    return max_score, aggregated_context
 
 def load_system(vocab_path="vocab.json", model_path="kle_tech_bot.pth"):
     if not os.path.exists(vocab_path) or not os.path.exists(model_path):

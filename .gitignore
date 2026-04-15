@@ -37,5 +37,6 @@ Thumbs.db
 
 # Project Specific
 kle_tech_dataset.jsonl
+training_debug.log
 # You can choose to keep .pth weights on github if they are small (6MB is fine)
 # kle_tech_bot.pth

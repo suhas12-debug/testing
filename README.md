@@ -142,10 +142,40 @@ Trains the custom Transformer on the generated dataset (uses GPU if available).
 python train.py
 ```
 
-### 3. Chat with the Bot
-Launches the interactive CLI to ask questions about KLE Tech.
+### 3. Chat with the Bot (Default Mode)
+Launches the interactive CLI using your custom-trained 0.6M parameter Transformer.
 ```bash
 python chat.py
+```
+
+### 4. Chat with the Bot (Hybrid LLM Mode) 🌟
+Launches the CLI using **Qwen2.5-1.5B-Instruct**. This mode uses your local 4GB GPU to run a massive 1.5 Billion parameter model in 4-bit mode. It uses the university dataset as context to provide much smarter and more natural answers.
+```bash
+python chat_qwen.py
+```
+
+---
+
+## 🏗️ Hybrid LLM Architecture (Advanced)
+
+When running in **Qwen Mode**, the system follows a modern **Retrieval-Augmented Generation (RAG)** pipeline:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              HYBRID RAG INFERENCE PIPELINE              │
+│                                                         │
+│  User Query ──► TF-IDF Matcher ──► Best Fact Retrieval  │
+│                                           │             │
+│                                           ▼             │
+│  System Prompt ◄── [University Data] + [User Question]  │
+│                                           │             │
+│                                           ▼             │
+│                                  Qwen2.5-1.5B (4-bit)   │
+│                                    (Local Inference)    │
+│                                           │             │
+│                                           ▼             │
+│                                    Natural Response     │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
