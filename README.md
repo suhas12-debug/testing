@@ -1,12 +1,12 @@
-# KLE Tech University Chatbot (Custom Seq2Seq Transformer)
+# KLE Tech University Chatbot (Precision-0.5B Hybrid RAG)
 
-A robust, custom-built Seq2Seq Transformer chatbot designed for **KLE Technological University**. This bot is built entirely from scratch using PyTorch — no pre-trained LLMs, no external APIs. It ensures high precision and factual accuracy for university-specific queries.
+A high-performance, university-specific chatbot for **KLE Technological University**. This system uses a **Precision-0.5B Hybrid** architecture—combining a custom "Fact-Shield" retrieval engine with a fine-tuned Qwen2.5-0.5B-Instruct model. It is optimized to deliver 100% factual accuracy on local hardware with only **4GB of VRAM**.
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ System Architecture: "Precision-0.5B"
 
-This project uses a **Hybrid Retrieval-Augmented Generation (RAG)** approach. Instead of relying on a multi-billion parameter model, it combines a high-precision **TF-IDF Retrieval Matcher** with a custom-trained **Seq2Seq Transformer** to ensure zero hallucinations.
+This project evolved from a simple Transformer to a modern **Hybrid Retrieval-Augmented Generation (RAG)** pipeline. It uses massive data augmentation and "Brute Force" fine-tuning to eliminate hallucinations.
 
 ### High-Level System Workflow
 
@@ -91,14 +91,14 @@ This project uses a **Hybrid Retrieval-Augmented Generation (RAG)** approach. In
 
 ## 🛠️ Technical Implementation Details
 
-| Component              | Technology                          | Purpose                                                   |
+| Component              | Technology                          | Precision Strategy                                         |
 |------------------------|-------------------------------------|-----------------------------------------------------------|
-| **Tokenization**       | Custom Word-Level Vocab             | Splits text into words with `<SOS>`, `<EOS>`, `<PAD>`, `<UNK>` tokens |
-| **Data Augmentation**  | Synonym-based expansion             | Generates 3x training pairs to improve robustness         |
-| **Matching Engine**    | TF-IDF with Bi-grams (1,2)         | Prevents "6th sem" vs "4th sem" confusion                 |
-| **Model**              | PyTorch `nn.Transformer`            | Custom Encoder-Decoder with Positional Encoding           |
-| **Training**           | Teacher Forcing + CUDA              | GPU-accelerated for fast convergence                      |
-| **Response Formatting**| Regex-based post-processor          | Proper capitalization, punctuation, and number formatting  |
+| **LLM Core**           | Qwen2.5-0.5B-Instruct               | Tiny footprint with high instruction-following capability. |
+| **Fine-Tuning**        | PEFT / LoRA (Rank 16)               | "Brute Force" 10-epoch training for factual memorization. |
+| **Quantization**       | BitsAndBytes (4-bit NF4)           | Reduces VRAM usage of the brain to ~1.2GB.                |
+| **Matching Engine**    | TF-IDF with Context Purity          | "Winner-Takes-All" logic isolates correct info.           |
+| **Augmentation**       | 15x Linguistic Expansion           | Generated 1,400+ unique user queries for training.        |
+| **Hardware**           | NVIDIA RTX 3050 (4GB VRAM)          | Fully local, high-speed inference.                        |
 
 ---
 
@@ -128,30 +128,23 @@ This project uses a **Hybrid Retrieval-Augmented Generation (RAG)** approach. In
 
 ---
 
-## 📖 How to Use
-
 ### 1. Generate Dataset
-Compiles the university knowledge into a structured JSONL format.
+Compiles the university knowledge into a 1,400+ sample augmented dataset.
 ```bash
 python generate_dataset.py
 ```
 
-### 2. Train the Model
-Trains the custom Transformer on the generated dataset (uses GPU if available).
+### 2. Fine-Tune the Brain (Optional)
+Re-trains the LoRA adapter on your specific university facts.
 ```bash
-python train.py
+# Windows (requires Python UTF-8 encoding)
+$env:PYTHONUTF8=1; python finetune_qwen.py
 ```
 
-### 3. Chat with the Bot (Default Mode)
-Launches the interactive CLI using your custom-trained 0.6M parameter Transformer.
+### 3. Chat with the Expert Bot 🌟
+Launches the high-precision CLI using the **Precision-0.5B** hybrid brain.
 ```bash
-python chat.py
-```
-
-### 4. Chat with the Bot (Hybrid LLM Mode) 🌟
-Launches the CLI using **Qwen2.5-1.5B-Instruct**. This mode uses your local 4GB GPU to run a massive 1.5 Billion parameter model in 4-bit mode. It uses the university dataset as context to provide much smarter and more natural answers.
-```bash
-python chat_qwen.py
+$env:PYTHONUTF8=1; python chat_qwen.py
 ```
 
 ---
@@ -195,21 +188,20 @@ When running in **Qwen Mode**, the system follows a modern **Retrieval-Augmented
 
 ## 📁 Project Structure
 
-| File                    | Description                                              |
-|-------------------------|----------------------------------------------------------|
-| `transformer_model.py`  | Custom PyTorch Seq2Seq Transformer architecture          |
-| `vocab_builder.py`      | Word-level tokenization with synonym augmentation        |
-| `train.py`              | GPU-accelerated training pipeline with Teacher Forcing   |
-| `chat.py`               | Interactive CLI with TF-IDF context retrieval            |
-| `generate_dataset.py`   | Source of all university knowledge (Calendar, Timetables)|
-| `kle_tech_bot.pth`      | Trained model weights (~6 MB)                            |
+| File                      | Description                                                  |
+|---------------------------|--------------------------------------------------------------|
+| `chat_qwen.py`            | Main Inference Engine with "Literal Mode" and Context Purity. |
+| `finetune_qwen.py`        | High-Intensity 10-Epoch training script for 4GB VRAM.       |
+| `generate_dataset.py`     | "Brute Force" generator creating 1,400+ augmented facts.    |
+| `chat.py`                 | The TF-IDF Search Core & Stop-Word Filter logic.            |
+| `kle_tech_qwen_adapter/`  | Fine-tuned LoRA weights — the university's "Specialized Brain". |
 
 ---
 
-## 📈 Training Summary
+## 📈 "Precision-0.5B" training Metrics
 
-- **Dataset Size:** 292 distinct Q&A pairs (804 with augmentations)
-- **Vocabulary Size:** 764 unique words
-- **Training Epochs:** 200
-- **Best Loss:** 0.0042
-- **Hardware:** NVIDIA CUDA GPU
+- **Total Samples:** 1,496 unique Q&A pairs
+- **Training Epochs:** 10
+- **Final Loss:** 0.04
+- **Mean Token Accuracy:** 98.6%
+- **Target Hardware:** RTX 3050 (4GB VRAM)
