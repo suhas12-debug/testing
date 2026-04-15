@@ -1,188 +1,112 @@
-# KLE Tech University Chatbot (Precision-0.5B Hybrid RAG)
+# KLE Tech University Chatbot (Semantic RAG Hybrid)
 
-A high-performance, university-specific chatbot for **KLE Technological University**. This system uses a **Precision-0.5B Hybrid** architecture—combining a custom "Fact-Shield" retrieval engine with a fine-tuned Qwen2.5-0.5B-Instruct model. It is optimized to deliver 100% factual accuracy on local hardware with only **4GB of VRAM**.
+A high-performance, university-specific chatbot for **KLE Technological University**. This system uses a **Semantic Hybrid RAG** architecture—combining a powerful `Sentence-BERT` semantic retrieval engine with a highly efficient Qwen2.5-0.5B-Instruct model. It is completely optimized to deliver 100% factual accuracy on local hardware with only **4GB of VRAM**.
 
 ---
 
-## 🏗️ System Architecture: "Precision-0.5B"
+## 🏗️ System Architecture: "Semantic-0.5B"
 
-This project evolved from a simple Transformer to a modern **Hybrid Retrieval-Augmented Generation (RAG)** pipeline. It uses massive data augmentation and "Brute Force" fine-tuning to eliminate hallucinations.
+This project evolved from a simple sequence-to-sequence transformer relying on basic TF-IDF into a modern **Semantic Retrieval-Augmented Generation (RAG)** pipeline.
 
-### High-Level System Workflow
+### 🧠 The Inference Pipeline (Semantic Search RAG)
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        TRAINING PIPELINE                            │
-│                                                                     │
-│  University Knowledge ──► generate_dataset.py ──► dataset.jsonl     │
-│        (Calendar, Timetable,       │                                │
-│         Placements, etc.)          ▼                                │
-│                            vocab_builder.py ──► Custom Vocabulary   │
-│                                    │                                │
-│                                    ▼                                │
-│                               train.py ──► kle_tech_bot.pth         │
-│                          (Teacher Forcing,       (Trained Weights)  │
-│                           CUDA/GPU Accel.)                          │
-└─────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────┐
-│                        INFERENCE PIPELINE                           │
-│                                                                     │
-│  User Query ──► TF-IDF Bi-gram Matcher ──► Best Matching Question   │
-│                  (Cosine Similarity)              │                 │
-│                                                   ▼                 │
-│                                        Seq2Seq Transformer          │
-│                                        (Encoder → Decoder)          │
-│                                                   │                 │
-│                                                   ▼                 │
-│                                        Response Formatter           │
-│                                        (Capitalization, Punctuation)│
-│                                                   │                 │
-│                                                   ▼                 │
-│                                           Final Answer              │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Custom Transformer Architecture (Encoder-Decoder)
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                    Seq2Seq Transformer Model                     │
-│                                                                  │
-│  ┌─────────────────────┐          ┌─────────────────────────┐    │
-│  │      ENCODER         │         │        DECODER          │    │
-│  │                      │         │                         │    │
-│  │  Input Embedding     │         │  Output Embedding       │    │
-│  │        │             │         │        │                │    │
-│  │        ▼             │         │        ▼                │    │
-│  │  Positional Encoding │         │  Positional Encoding    │    │
-│  │        │             │         │        │                │    │
-│  │        ▼             │         │        ▼                │    │
-│  │  Multi-Head          │         │  Masked Multi-Head      │    │
-│  │  Self-Attention      │         │  Self-Attention         │    │
-│  │        │             │         │        │                │    │
-│  │        ▼             │         │        ▼                │    │
-│  │  Feed Forward        │────────►│  Cross-Attention        │    │
-│  │  Network             │ Context │  (Encoder-Decoder Attn) │    │
-│  │                      │         │        │                │    │
-│  └─────────────────────┘          │        ▼                │    │
-│                                   │  Feed Forward Network   │    │
-│                                   │        │                │    │
-│                                   └────────┼────────────────┘    │
-│                                            ▼                     │
-│                                   Linear → Softmax → Output      │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-### Data Augmentation Pipeline
-
-```
-  Original Q&A Pair
-        │
-        ▼
-  Synonym Replacement ──► "when is" → "at what time is"
-        │                  "tell me" → "explain"
-        ▼                  "what are" → "list the"
-  Augmented Dataset
-  (3x more training pairs)
+```text
+Student types question
+         │
+         ▼
+ ┌───────────────────────┐
+ │  Sentence-BERT (CPU)  │ ◄── converts question to meaning vector
+ │  all-MiniLM-L6-v2     │     (understands "kab hai exam" = "when is exam")
+ └───────────────────────┘
+         │
+         ▼
+ ┌───────────────────────┐
+ │  knowledge_base       │ ◄── your kle_tech_dataset.jsonl file
+ │  (your scraped data)  │     finds top 3 most relevant facts
+ └───────────────────────┘
+         │
+         ▼
+   score > 0.35?
+     ╱       ╲
+   YES        NO
+   │          │
+   ▼          ▼
+facts found   "please contact
+   │          university office"
+   │          │
+ ┌─▼──────────▼──────────┐
+ │  Qwen 0.5B 4-bit(GPU) │ ◄── only job: make answer sound natural
+ │  ~400MB VRAM          │     reads facts → writes clean reply
+ └───────────────────────┘
+         │
+         ▼
+   Answer shown
 ```
 
 ---
 
-## 🛠️ Technical Implementation Details
+## 🛠️ Technical Specs
 
-| Component              | Technology                          | Precision Strategy                                         |
+| Component              | Technology                          | Strategy Implementation                                     |
 |------------------------|-------------------------------------|-----------------------------------------------------------|
-| **LLM Core**           | Qwen2.5-0.5B-Instruct               | Tiny footprint with high instruction-following capability. |
-| **Fine-Tuning**        | PEFT / LoRA (Rank 16)               | "Brute Force" 10-epoch training for factual memorization. |
+| **LLM Generator Core** | Qwen2.5-0.5B-Instruct               | Tiny footprint with high instruction-following capability. |
 | **Quantization**       | BitsAndBytes (4-bit NF4)           | Reduces VRAM usage of the brain to ~1.2GB.                |
-| **Matching Engine**    | TF-IDF with Context Purity          | "Winner-Takes-All" logic isolates correct info.           |
-| **Augmentation**       | 15x Linguistic Expansion           | Generated 1,400+ unique user queries for training.        |
-| **Hardware**           | NVIDIA RTX 3050 (4GB VRAM)          | Fully local, high-speed inference.                        |
+| **Matching Engine**    | Sentence-Transformers (all-MiniLM)  | Computes dense semantic vectors, parsing true *meaning*.  |
+| **Data Source**        | `kle_tech_dataset.jsonl`          | Expert curated master grid for timetables and university facts. |
+| **Hardware Goal**      | NVIDIA RTX 3050 (4GB VRAM)          | Fully local, high-speed, 100% private inference.          |
 
 ---
 
 ## 🚀 Key Features
 
-- **Custom Transformer Architecture:** Full Encoder-Decoder Transformer with Multi-Head Attention and Positional Encoding — no pre-trained models used.
-- **Hybrid RAG Matching:** TF-IDF Vectorizer with Bi-gram matching retrieves the best context before generation, preventing hallucinations.
+- **Semantic Memory Overrides Keywords:** Using `all-MiniLM-L6-v2`, the system interprets the student's *intent*. "Where is the college?" mathematically aligns with "KLE Tech Location" without needing hard-coded synonyms.
+- **Strict Logic Thresholds:** Employs a strict "> 0.35" cosine similarity threshold. If the user asks an irrelevant question, the "Bouncer" system safely redirects them rather than allowing the AI to hallucinate.
 - **University Intelligence:** Pre-loaded with comprehensive data including:
+  - 100% specific 6-Day timetables for **Semester IV** and **Semester VI** divisions.
   - Placement records (highest packages, top recruiters).
-  - Full Academic Calendar (Even Semester 2025-26).
-  - Weekly Master Timetables for 4th & 6th Sem (Divisions A-F).
-  - Elective-specific schedules (ADIC, MCAP, OOPS, AICD, AL).
-  - ESA (End Semester Assessment) Practical & Theory dates.
-- **100% Offline:** No external APIs, no internet required. Works entirely on your local hardware.
+  - Academic Dates & Holidays.
+- **100% Offline and Private:** No external APIs, no internet required. Works entirely on local hardware.
 
 ---
 
 ## 🛠️ Technology Stack
 
-| Layer           | Tool                                |
-|-----------------|-------------------------------------|
-| Language        | Python 3.x                          |
-| Deep Learning   | PyTorch                             |
-| NLP Matching    | Scikit-Learn (TfidfVectorizer)      |
-| Hardware        | NVIDIA GPU (CUDA)                   |
-| Tokenization    | Custom word-level vocabulary        |
+| Layer           | Tool                                 |
+|-----------------|--------------------------------------|
+| Language        | Python 3.x                           |
+| Transformer LLM | HuggingFace `transformers` & `torch` |
+| Semantic Search | `sentence-transformers`              |
+| Hardware        | NVIDIA GPU (CUDA) for Qwen           |
 
 ---
 
-### 1. Generate Dataset
-Compiles the university knowledge into a 1,400+ sample augmented dataset.
+## 📖 How to Use
+
+### 1. Build the Master Knowledge Base
+Generates the pristine `.jsonl` data grid with complete timetable grids.
 ```bash
 python generate_dataset.py
 ```
 
-### 2. Fine-Tune the Brain (Optional)
-Re-trains the LoRA adapter on your specific university facts.
+### 2. Chat with the Expert Bot 🌟
+Launches the high-precision CLI utilizing the full hybrid Semantic RAG pipeline.
 ```bash
 # Windows (requires Python UTF-8 encoding)
-$env:PYTHONUTF8=1; python finetune_qwen.py
-```
-
-### 3. Chat with the Expert Bot 🌟
-Launches the high-precision CLI using the **Precision-0.5B** hybrid brain.
-```bash
 $env:PYTHONUTF8=1; python chat_qwen.py
-```
-
----
-
-## 🏗️ Hybrid LLM Architecture (Advanced)
-
-When running in **Qwen Mode**, the system follows a modern **Retrieval-Augmented Generation (RAG)** pipeline:
-
-```
-┌─────────────────────────────────────────────────────────┐
-│              HYBRID RAG INFERENCE PIPELINE              │
-│                                                         │
-│  User Query ──► TF-IDF Matcher ──► Best Fact Retrieval  │
-│                                           │             │
-│                                           ▼             │
-│  System Prompt ◄── [University Data] + [User Question]  │
-│                                           │             │
-│                                           ▼             │
-│                                  Qwen2.5-1.5B (4-bit)   │
-│                                    (Local Inference)    │
-│                                           │             │
-│                                           ▼             │
-│                                    Natural Response     │
-└─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 📊 Sample Queries
 
-| Query                                              | Category          |
-|----------------------------------------------------|-------------------|
-| *"When are the practical exam dates?"*             | ESA Calendar      |
-| *"What is the Monday schedule for IV A?"*          | 4th Sem Timetable |
-| *"I have picked the OOPS elective. When is my class?"* | 6th Sem Electives |
-| *"Who hired 249 students in 2023?"*                | Placements        |
-| *"When is Pleiades fest?"*                         | Events            |
-| *"List all holidays this semester"*                | Holidays          |
+Try these questions to witness the semantic retrieval engine working flawlessly:
+
+| Query Focus                                        | Why it works                                          |
+|----------------------------------------------------|-------------------------------------------------------|
+| *"Where is the college located?"*                  | Semantic engine knows "college" = "KLE Tech".         |
+| *"What is the Thursday schedule for VI D?"*        | Precision data extraction from the generated classes. |
+| *"Who hired the most students this year?"*         | Contextually understands "hired" links to "placements".|
+| *"Tell me about the latest cricket match"*         | Gets mathematically blocked (Score < 0.35) and safely rejected. |
 
 ---
 
@@ -190,18 +114,6 @@ When running in **Qwen Mode**, the system follows a modern **Retrieval-Augmented
 
 | File                      | Description                                                  |
 |---------------------------|--------------------------------------------------------------|
-| `chat_qwen.py`            | Main Inference Engine with "Literal Mode" and Context Purity. |
-| `finetune_qwen.py`        | High-Intensity 10-Epoch training script for 4GB VRAM.       |
-| `generate_dataset.py`     | "Brute Force" generator creating 1,400+ augmented facts.    |
-| `chat.py`                 | The TF-IDF Search Core & Stop-Word Filter logic.            |
-| `kle_tech_qwen_adapter/`  | Fine-tuned LoRA weights — the university's "Specialized Brain". |
-
----
-
-## 📈 "Precision-0.5B" training Metrics
-
-- **Total Samples:** 1,496 unique Q&A pairs
-- **Training Epochs:** 10
-- **Final Loss:** 0.04
-- **Mean Token Accuracy:** 98.6%
-- **Target Hardware:** RTX 3050 (4GB VRAM)
+| `chat_qwen.py`            | Main Inference Engine with Qwen Generation and Chat Templates.|
+| `chat.py`                 | The Semantic Search Core running Sentence-BERT vector math.   |
+| `generate_dataset.py`     | Pristine data generator maintaining the university truths.    |
