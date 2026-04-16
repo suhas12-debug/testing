@@ -1,6 +1,5 @@
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from peft import PeftModel
 from chat import load_retrieval_system, find_best_answer, print_logo, typing_print, CLR_BLUE, CLR_CYAN, CLR_GREEN, CLR_YELLOW, CLR_RESET, SIMILARITY_THRESHOLD, FALLBACK_RESPONSES
 import random
 import time
@@ -17,7 +16,7 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_compute_dtype=torch.float16
 )
 
-def load_qwen(adapter_path="kle_tech_qwen_adapter"):
+def load_qwen():
     print(f"{CLR_YELLOW}Loading Qwen2.5-0.5B (4-bit)...{CLR_RESET}")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
     
@@ -29,19 +28,12 @@ def load_qwen(adapter_path="kle_tech_qwen_adapter"):
         low_cpu_mem_usage=True
     )
 
-    # Load Fine-tuned Adapter if it exists
-    if os.path.exists(adapter_path):
-        print(f"{CLR_YELLOW}Applying fine-tuned 'KLE Tech' brain...{CLR_RESET}")
-        model = PeftModel.from_pretrained(model, adapter_path)
-    else:
-        print(f"{CLR_BLUE}No adapter found. Using base model.{CLR_RESET}")
-        
     return model, tokenizer
 
 def generate_answer(model_tokenizer_tuple, user_input, fact_context, score):
     model, tokenizer = model_tokenizer_tuple
     
-    if score >= 0.35:
+    if score >= SIMILARITY_THRESHOLD:
         messages = [
             {
                 "role": "system",
@@ -83,13 +75,13 @@ def main():
     # 1. Load the Retrieval System (Sentence-BERT)
     kb, known_questions, embeddings, st_model = load_retrieval_system()
     
-    # 2. Load the Generation System (Qwen LLM + Adapter)
+    # 2. Load the Generation System (Qwen LLM)
     qbox = load_qwen()
     
     # 3. Clean up VRAM for a fresh session
     torch.cuda.empty_cache()
-    print(f"{CLR_GREEN}Fine-Tuned Hybrid Bot Ready!{CLR_RESET} Optimized for 4GB VRAM.")
-    print(f"I am now specifically trained on KLE Tech data for better accuracy.\n")
+    print(f"{CLR_GREEN}Semantic RAG Bot Ready!{CLR_RESET} Optimized for 4GB VRAM.")
+    print(f"I now provide 100% accurate answers based on the latest university data.\n")
     
     while True:
         try:

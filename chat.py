@@ -77,7 +77,7 @@ def load_retrieval_system(dataset_path="kle_tech_dataset.jsonl"):
 
     return knowledge_base, known_questions, question_embeddings, st_model
 
-def find_best_answer(query, knowledge_base, known_questions, question_embeddings, st_model, k=3, min_score=0.35):
+def find_best_answer(query, knowledge_base, known_questions, question_embeddings, st_model, k=6, min_score=0.30):
     """Finds the top matching facts using Sentence-BERT cosine similarity."""
     if not known_questions or question_embeddings is None or st_model is None:
         return 0.0, "No knowledge base loaded."
